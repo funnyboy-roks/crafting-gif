@@ -1,0 +1,14 @@
+[package]
+name = "crafting-gif"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+anyhow = "1.0.100"
+flate2 = { version = "1.1.4", features = ["zlib-rs"], default-features = false }
+image = "0.25.8"
+phf = "0.13.1"
+
+[build-dependencies]
+flate2 = { version = "1.1.4", features = ["zlib-rs"], default-features = false }
+phf_codegen = "0.13.1"
