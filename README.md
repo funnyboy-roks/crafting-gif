@@ -2,9 +2,16 @@
 
 A tool to create a GIF of a Minecraft crafting recipe.
 
+## Examples
+
+### [`examples/bed.toml`](./examples/bed.toml)
 ![Example of bed recipe](./examples/bed.gif)
-![Example of barrel (light mode)](./examples/barrel.gif)
-![Example of barrel (dark mode)](./examples/barrel-dark.gif)
+
+### [`examples/barrel.toml`](./examples/barrel.toml)
+![Example of barrel recipe](./examples/barrel.gif)
+
+### [`examples/barrel.toml`](./examples/barrel.toml) (with `--dark`)
+![Example of barrel recipe (dark mode)](./examples/barrel-dark.gif)
 
 ## Development
 
