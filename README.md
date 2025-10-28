@@ -2,7 +2,7 @@
 
 A tool to create a GIF of a Minecraft crafting recipe.
 
-![Example](./img/example.png)
+![Example](./img/example.gif)
 
 ## Development
 

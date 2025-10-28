@@ -1,9 +1,14 @@
-use std::path::Path;
+#![allow(clippy::identity_op)]
 
+use std::{fs::File, io::BufWriter, path::Path};
+
+use gif::{Encoder, Frame};
 use image::{GenericImageView, ImageBuffer, ImageReader, Pixel, Rgb};
 
+/// Size of a slot in `crafting_table.png`
 const GRID_SIZE: u32 = 16;
 
+/// The amount that `crafting_table.png` should be upscaled
 const RATIO: u32 = 5;
 
 fn grid_position(grid_position: u32) -> (u32, u32) {
@@ -11,7 +16,7 @@ fn grid_position(grid_position: u32) -> (u32, u32) {
 
     let (cx, cy) = if grid_position == 9 {
         // corner of output slot is (93, 17)
-        // Output slot is 24x
+        // Output slot is 24x24
         ((93 + 13) * RATIO, (17 + 13) * RATIO)
     } else {
         let left = 4 + GRID_SIZE / 2;
@@ -33,14 +38,16 @@ fn place_item(
     pos: u32,
     image_path: impl AsRef<Path>,
 ) -> anyhow::Result<()> {
-    let item = ImageReader::open(image_path)?.decode()?;
-
     let icon_size = GRID_SIZE * RATIO;
 
-    let item_rz = item.resize_exact(icon_size, icon_size, image::imageops::FilterType::Nearest);
+    let item = ImageReader::open(image_path)?.decode()?.resize_exact(
+        icon_size,
+        icon_size,
+        image::imageops::FilterType::Nearest,
+    );
 
     let (x, y) = grid_position(pos);
-    for (ix, iy, src) in item_rz.pixels() {
+    for (ix, iy, src) in item.pixels() {
         let x = x + ix;
         let y = y + iy;
         let mut px = img.get_pixel(x, y).to_rgba();
@@ -52,31 +59,72 @@ fn place_item(
 }
 
 fn main() -> anyhow::Result<()> {
-    let img = ImageReader::open("crafting_table.png")?.decode()?;
-    let mut img = img
+    let base = ImageReader::open("crafting_table.png")?.decode()?;
+    let base = base
         .resize_exact(
-            img.width() * RATIO,
-            img.height() * RATIO,
+            base.width() * RATIO,
+            base.height() * RATIO,
             image::imageops::FilterType::Nearest,
         )
         .to_rgb8();
 
-    place_item(&mut img, 0, "textures/oak_planks.png")?;
-    place_item(&mut img, 1, "textures/oak_planks.png")?;
-    place_item(&mut img, 2, "textures/oak_planks.png")?;
-    place_item(&mut img, 3, "textures/oak_planks.png")?;
-    place_item(&mut img, 4, "textures/chest.png")?;
-    place_item(&mut img, 5, "textures/oak_planks.png")?;
-    place_item(&mut img, 6, "textures/oak_planks.png")?;
-    place_item(&mut img, 7, "textures/oak_planks.png")?;
-    place_item(&mut img, 8, "textures/oak_planks.png")?;
+    let file = File::create("out.gif")?;
+    let mut file = BufWriter::new(file);
+    let mut gif_encoder = Encoder::new(
+        &mut file,
+        base.width().try_into()?,
+        base.height().try_into()?,
+        &[],
+    )?;
 
-    place_item(&mut img, 9, "textures/barrel.png")?;
+    gif_encoder.set_repeat(gif::Repeat::Infinite)?;
 
-    // let img: DynamicImage = img.into();
-    // let img = img.resize(512, 800, image::imageops::FilterType::Nearest);
+    let width = base.width();
+    let height = base.height();
 
-    img.save("out.png")?;
+    macro_rules! foo {
+        ($ty: literal) => {{
+            let mut img = base.clone();
+
+            move || -> anyhow::Result<_> {
+                place_item(&mut img, 0, concat!("textures/", $ty, "_planks.png"))?;
+                place_item(&mut img, 1, concat!("textures/", $ty, "_planks.png"))?;
+                place_item(&mut img, 2, concat!("textures/", $ty, "_planks.png"))?;
+                place_item(&mut img, 3, concat!("textures/", $ty, "_planks.png"))?;
+                place_item(&mut img, 4, "textures/chest.png")?;
+                place_item(&mut img, 5, concat!("textures/", $ty, "_planks.png"))?;
+                place_item(&mut img, 6, concat!("textures/", $ty, "_planks.png"))?;
+                place_item(&mut img, 7, concat!("textures/", $ty, "_planks.png"))?;
+                place_item(&mut img, 8, concat!("textures/", $ty, "_planks.png"))?;
+
+                place_item(&mut img, 9, "textures/barrel.png")?;
+
+                let mut frame = Frame::from_rgb(width as _, height as _, img.as_raw());
+                frame.delay = 100;
+                anyhow::Result::Ok(frame)
+            }
+        }};
+    }
+
+    let mut threads = Vec::new();
+    threads.push(std::thread::spawn(foo!("oak")));
+    threads.push(std::thread::spawn(foo!("spruce")));
+    threads.push(std::thread::spawn(foo!("birch")));
+    threads.push(std::thread::spawn(foo!("jungle")));
+    threads.push(std::thread::spawn(foo!("acacia")));
+    threads.push(std::thread::spawn(foo!("dark_oak")));
+    threads.push(std::thread::spawn(foo!("mangrove")));
+    threads.push(std::thread::spawn(foo!("cherry")));
+    threads.push(std::thread::spawn(foo!("bamboo")));
+    threads.push(std::thread::spawn(foo!("crimson")));
+    threads.push(std::thread::spawn(foo!("warped")));
+
+    threads
+        .into_iter()
+        .try_for_each(|frame| -> anyhow::Result<_> {
+            gif_encoder.write_frame(&frame.join().unwrap().unwrap())?;
+            Ok(())
+        })?;
 
     Ok(())
 }
