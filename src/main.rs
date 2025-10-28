@@ -1,9 +1,23 @@
 #![allow(clippy::identity_op)]
 
-use std::{fs::File, io::BufWriter, path::Path};
+mod cli;
+mod config;
 
+use std::{
+    fs::{self, File},
+    io::{BufWriter, Write},
+    path::Path,
+};
+
+use anyhow::Context;
+use clap::Parser;
 use gif::{Encoder, Frame};
-use image::{GenericImageView, ImageBuffer, ImageReader, Pixel, Rgb};
+use image::{DynamicImage, GenericImageView, ImageBuffer, ImageReader, Pixel, Rgb};
+
+use crate::config::Config;
+
+const CRAFTING_TABLE_PNG: &[u8] = include_bytes!("../assets/crafting_table.png");
+const CRAFTING_TABLE_DARK_PNG: &[u8] = include_bytes!("../assets/crafting_table_dark.png");
 
 /// Size of a slot in `crafting_table.png`
 const GRID_SIZE: u32 = 16;
@@ -11,7 +25,7 @@ const GRID_SIZE: u32 = 16;
 /// The amount that `crafting_table.png` should be upscaled
 const RATIO: u32 = 5;
 
-fn grid_position(grid_position: u32) -> (u32, u32) {
+const fn grid_position(grid_position: u32) -> (u32, u32) {
     let icon_size = GRID_SIZE * RATIO;
 
     let (cx, cy) = if grid_position == 9 {
@@ -58,8 +72,64 @@ fn place_item(
     Ok(())
 }
 
+struct CountingWriter<W> {
+    inner: W,
+    count: usize,
+}
+
+impl<W> CountingWriter<W> {
+    pub fn new(w: W) -> Self {
+        Self { inner: w, count: 0 }
+    }
+
+    pub fn count(&self) -> usize {
+        self.count
+    }
+}
+
+impl<W> Write for CountingWriter<W>
+where
+    W: Write,
+{
+    fn write(&mut self, buf: &[u8]) -> std::io::Result<usize> {
+        self.inner.write(buf).inspect(|n| self.count += n)
+    }
+
+    fn flush(&mut self) -> std::io::Result<()> {
+        self.inner.flush()
+    }
+
+    fn write_vectored(&mut self, bufs: &[std::io::IoSlice<'_>]) -> std::io::Result<usize> {
+        self.inner.write_vectored(bufs).inspect(|n| self.count += n)
+    }
+
+    fn write_all(&mut self, buf: &[u8]) -> std::io::Result<()> {
+        self.inner.write_all(buf)?;
+        self.count += buf.len();
+        Ok(())
+    }
+
+    fn write_fmt(&mut self, args: std::fmt::Arguments<'_>) -> std::io::Result<()> {
+        self.inner.write_fmt(args)
+    }
+}
+
 fn main() -> anyhow::Result<()> {
-    let base = ImageReader::open("crafting_table.png")?.decode()?;
+    let cli = cli::Cli::parse();
+
+    let config = fs::read_to_string(cli.recipe)?;
+    let config: Config = toml::from_str(&config)?;
+
+    let base = ImageReader::with_format(
+        std::io::Cursor::new(if cli.dark {
+            CRAFTING_TABLE_DARK_PNG
+        } else {
+            CRAFTING_TABLE_PNG
+        }),
+        image::ImageFormat::Png,
+    )
+    .decode()?;
+
     let base = base
         .resize_exact(
             base.width() * RATIO,
@@ -68,8 +138,7 @@ fn main() -> anyhow::Result<()> {
         )
         .to_rgb8();
 
-    let file = File::create("out.gif")?;
-    let mut file = BufWriter::new(file);
+    let mut file = CountingWriter::new(BufWriter::new(File::create(&cli.out)?));
     let mut gif_encoder = Encoder::new(
         &mut file,
         base.width().try_into()?,
@@ -82,49 +151,41 @@ fn main() -> anyhow::Result<()> {
     let width = base.width();
     let height = base.height();
 
-    macro_rules! foo {
-        ($ty: literal) => {{
-            let mut img = base.clone();
-
-            move || -> anyhow::Result<_> {
-                place_item(&mut img, 0, concat!("textures/", $ty, "_planks.png"))?;
-                place_item(&mut img, 1, concat!("textures/", $ty, "_planks.png"))?;
-                place_item(&mut img, 2, concat!("textures/", $ty, "_planks.png"))?;
-                place_item(&mut img, 3, concat!("textures/", $ty, "_planks.png"))?;
-                place_item(&mut img, 4, "textures/chest.png")?;
-                place_item(&mut img, 5, concat!("textures/", $ty, "_planks.png"))?;
-                place_item(&mut img, 6, concat!("textures/", $ty, "_planks.png"))?;
-                place_item(&mut img, 7, concat!("textures/", $ty, "_planks.png"))?;
-                place_item(&mut img, 8, concat!("textures/", $ty, "_planks.png"))?;
-
-                place_item(&mut img, 9, "textures/barrel.png")?;
-
-                let mut frame = Frame::from_rgb(width as _, height as _, img.as_raw());
-                frame.delay = 100;
-                anyhow::Result::Ok(frame)
-            }
-        }};
-    }
-
     let mut threads = Vec::new();
-    threads.push(std::thread::spawn(foo!("oak")));
-    threads.push(std::thread::spawn(foo!("spruce")));
-    threads.push(std::thread::spawn(foo!("birch")));
-    threads.push(std::thread::spawn(foo!("jungle")));
-    threads.push(std::thread::spawn(foo!("acacia")));
-    threads.push(std::thread::spawn(foo!("dark_oak")));
-    threads.push(std::thread::spawn(foo!("mangrove")));
-    threads.push(std::thread::spawn(foo!("cherry")));
-    threads.push(std::thread::spawn(foo!("bamboo")));
-    threads.push(std::thread::spawn(foo!("crimson")));
-    threads.push(std::thread::spawn(foo!("warped")));
+    for i in 0..config.frames.get() {
+        let mut img = base.clone();
+        let (grid, result) = config.recipe(i as _)?;
+
+        threads.push(std::thread::spawn(move || -> anyhow::Result<_> {
+            for (i, x) in grid.into_iter().enumerate() {
+                if let Some(x) = x {
+                    place_item(&mut img, i as _, &x)
+                        .with_context(|| format!("Placing '{}' at slot {}", x.display(), i))?;
+                }
+            }
+
+            place_item(&mut img, 9, &result)
+                .with_context(|| format!("placing result: '{}'", result.display()))?;
+
+            let mut frame = Frame::from_rgb_speed(width as _, height as _, img.as_raw(), 5);
+            frame.delay = config.frame_duration;
+            anyhow::Result::Ok(frame)
+        }));
+    }
 
     threads
         .into_iter()
         .try_for_each(|frame| -> anyhow::Result<_> {
-            gif_encoder.write_frame(&frame.join().unwrap().unwrap())?;
+            let f = frame.join().unwrap()?;
+            gif_encoder.write_frame(&f)?;
             Ok(())
         })?;
+
+    eprintln!(
+        "Wrote {} bytes to {}.",
+        gif_encoder.into_inner()?.count(),
+        cli.out.display()
+    );
 
     Ok(())
 }

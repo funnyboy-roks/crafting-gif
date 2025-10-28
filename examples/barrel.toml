@@ -1,0 +1,36 @@
+frames = 11
+frame_duration = 50
+grid = '''
+A B A
+A _ A
+A B A
+'''
+result = "barrel"
+
+[key]
+A = { method = "cycle", items = [
+    "oak_planks",
+    "spruce_planks",
+    "birch_planks",
+    "jungle_planks",
+    "acacia_planks",
+    "dark_oak_planks",
+    "mangrove_planks",
+    "cherry_planks",
+    "bamboo_planks",
+    "crimson_planks",
+    "warped_planks",
+] }
+B = { method = "cycle", items = [
+    "oak_slab",
+    "spruce_slab",
+    "birch_slab",
+    "jungle_slab",
+    "acacia_slab",
+    "dark_oak_slab",
+    "mangrove_slab",
+    "cherry_slab",
+    "bamboo_slab",
+    "crimson_slab",
+    "warped_slab",
+] }

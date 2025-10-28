@@ -1,0 +1,58 @@
+frames = 16
+frame_duration = 50
+grid = '''
+_ _ _
+A A A
+B B B
+'''
+result = [
+    "white_bed",
+    "light_gray_bed",
+    "gray_bed",
+    "black_bed",
+    "brown_bed",
+    "red_bed",
+    "orange_bed",
+    "yellow_bed",
+    "lime_bed",
+    "green_bed",
+    "cyan_bed",
+    "light_blue_bed",
+    "blue_bed",
+    "purple_bed",
+    "magenta_bed",
+    "pink_bed",
+]
+
+[key]
+A = { method = "frame", items = [
+    "white_wool",
+    "light_gray_wool",
+    "gray_wool",
+    "black_wool",
+    "brown_wool",
+    "red_wool",
+    "orange_wool",
+    "yellow_wool",
+    "lime_wool",
+    "green_wool",
+    "cyan_wool",
+    "light_blue_wool",
+    "blue_wool",
+    "purple_wool",
+    "magenta_wool",
+    "pink_wool",
+] }
+B = { method = "cycle-slow", items = [
+    "oak_planks",
+    "spruce_planks",
+    "birch_planks",
+    "jungle_planks",
+    "acacia_planks",
+    "dark_oak_planks",
+    "mangrove_planks",
+    "cherry_planks",
+    "bamboo_planks",
+    "crimson_planks",
+    "warped_planks",
+] }

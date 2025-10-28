@@ -2,7 +2,9 @@
 
 A tool to create a GIF of a Minecraft crafting recipe.
 
-![Example](./img/example.gif)
+![Example of bed recipe](./examples/bed.gif)
+![Example of barrel (light mode)](./examples/barrel.gif)
+![Example of barrel (dark mode)](./examples/barrel-dark.gif)
 
 ## Development
 
