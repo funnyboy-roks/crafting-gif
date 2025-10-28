@@ -1,5 +1,5 @@
 frames = 11
-frame_duration = 50
+frame_duration = 100
 grid = '''
 A B A
 A _ A
